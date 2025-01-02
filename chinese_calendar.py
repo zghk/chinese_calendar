@@ -216,14 +216,25 @@ class ChineseCalendar:
                        (255, 255, 255, 0))
         draw = ImageDraw.Draw(img)
         
+        # 从配置文件获取字体设置
+        font_name = rest_config.get('font_name', "华文细黑")
+        font_size = rest_config.get('font_size', 14) * scale  # 字体也放大2倍
+        
         try:
-            # 从配置文件获取字体设置
-            font_name = rest_config.get('font_name', "STXIHEI.TTF")
-            font_size = rest_config.get('font_size', 14) * scale  # 字体也放大2倍
+            # 尝试使用系统字体名称
             font = ImageFont.truetype(font_name, font_size)
         except:
-            # 如果没有指定字体，使用默认字体
-            font = ImageFont.load_default()
+            try:
+                # 如果失败，尝试使用字体文件路径
+                font = ImageFont.truetype(f"{font_name}.ttf", font_size)
+            except:
+                try:
+                    # 再尝试使用STXIHEI.TTF
+                    font = ImageFont.truetype("STXIHEI.TTF", font_size)
+                except:
+                    print("警告：无法加载指定字体，将使用默认字体")
+                    # 如果还是失败，使用系统默认的中文字体
+                    font = ImageFont.load_default()
         
         # 从配置文件获取颜色设置
         color_str = rest_config.get('color', "008000")
@@ -288,35 +299,43 @@ class ChineseCalendar:
         wb = Workbook()
         ws = wb.active
         ws.title = f"{self.year}年{self.month}月"
+        
+        # 隐藏网格线
+        ws.sheet_view.showGridLines = False
+
+        # 插入一列在日历区域左边
+        ws.insert_cols(1)
 
         # 从配置文件获取列宽并转换为字符数（1个字符约等于1.1个单位宽度）
         column_width = self.config.get('column_width', 10.5) * 1.1
         # 设置列宽
-        for col in range(1, 8):
+        for col in range(2, 9):  # B到H列
             ws.column_dimensions[chr(64 + col)].width = column_width
+        # 设置A列宽度（左边空白列）
+        ws.column_dimensions['A'].width = column_width
 
         # 从配置文件获取样式设置
         styles = self.config.get('styles', {})
         layout = self.config.get('layout', {})
 
-        # 设置标题
-        ws.merge_cells('A1:G1')
-        ws['A1'] = f"{self.year}年{self.month}月"
+        # 设置标题（从第2行开始）
+        ws.merge_cells('B2:H2')
+        ws['B2'] = f"{self.year}年{self.month}月"
         title_style = styles.get('title', {})
-        ws['A1'].font = Font(
+        ws['B2'].font = Font(
             name=title_style.get('font_name', '微软雅黑'),
             size=title_style.get('font_size', 16),
             bold=title_style.get('bold', True)
         )
-        ws['A1'].alignment = Alignment(horizontal='center', vertical='center')
+        ws['B2'].alignment = Alignment(horizontal='center', vertical='center')
 
         # 设置星期标题
         weekdays = ["周一", "周二", "周三", "周四", "周五", "周六", "周日"]
         weekday_style = styles.get('weekday', {})
-        for col, day in enumerate(weekdays, 1):
-            cell = ws.cell(row=2, column=col)
+        for col, day in enumerate(weekdays, 2):  # 从B列开始
+            cell = ws.cell(row=3, column=col)
             cell.value = day
-            cell.alignment = Alignment(horizontal='center')
+            cell.alignment = Alignment(horizontal='center', vertical='center')  # 水平垂直居中
             cell.font = Font(
                 name=weekday_style.get('font_name', '微软雅黑'),
                 size=weekday_style.get('font_size', 10),
@@ -336,22 +355,53 @@ class ChineseCalendar:
         first_weekday = first_day.weekday()
         total_days = calendar.monthrange(self.year, self.month)[1]
         total_weeks = (first_weekday + total_days + 6) // 7
-        total_rows = 2 + (total_weeks * 2)  # 标题行 + 星期行 + (每周2行)
+        total_rows = 3 + (total_weeks * 2)  # 标题行 + 星期行 + (每周2行)
         
         # 设置行高
         row_heights = layout.get('row_heights', {})
-        ws.row_dimensions[1].height = row_heights.get('title', 30)
-        ws.row_dimensions[2].height = row_heights.get('weekday', 20)
+        ws.row_dimensions[2].height = row_heights.get('title', 30)  # 标题行
+        ws.row_dimensions[3].height = row_heights.get('weekday', 20)  # 星期行
         
         # 设置日期和农历行高
-        for r in range(3, total_rows + 1, 2):
+        for r in range(4, total_rows + 1, 2):
             ws.row_dimensions[r].height = row_heights.get('date', 30)
             ws.row_dimensions[r+1].height = row_heights.get('lunar', 30)
         
+        # 设置日历区域外边框（粗线）
+        border = Border(
+            left=Side(style='thick'),
+            right=Side(style='thick'),
+            top=Side(style='thick'),
+            bottom=Side(style='thick')
+        )
+        
+        # 应用边框到整个日历区域
+        for row in range(2, total_rows + 1):
+            for col in range(2, 9):  # B到H列
+                cell = ws.cell(row=row, column=col)
+                if row == 2:  # 顶部边框
+                    cell.border = Border(top=Side(style='thick'))
+                elif row == total_rows:  # 底部边框
+                    cell.border = Border(bottom=Side(style='thick'))
+                if col == 2:  # 左侧边框
+                    cell.border = Border(left=Side(style='thick'))
+                elif col == 8:  # 右侧边框
+                    cell.border = Border(right=Side(style='thick'))
+                    
+                # 设置角落的边框
+                if row == 2 and col == 2:  # 左上角
+                    cell.border = Border(left=Side(style='thick'), top=Side(style='thick'))
+                elif row == 2 and col == 8:  # 右上角
+                    cell.border = Border(right=Side(style='thick'), top=Side(style='thick'))
+                elif row == total_rows and col == 2:  # 左下角
+                    cell.border = Border(left=Side(style='thick'), bottom=Side(style='thick'))
+                elif row == total_rows and col == 8:  # 右下角
+                    cell.border = Border(right=Side(style='thick'), bottom=Side(style='thick'))
+        
         # 填充日历数据
         current_day = first_day
-        row = 3  # 从第3行开始（紧接着星期标题）
-        col = week_day + 1
+        row = 4  # 从第4行开始（紧接着星期标题）
+        col = week_day + 3  # 从C列开始，所以要加3而不是2
 
         while current_day.month == self.month:
             # 日期单元格
@@ -378,14 +428,10 @@ class ChineseCalendar:
             lunar_style = styles.get('lunar', {})
 
             if is_holiday_day:
-                # 添加"休"字图片
-                img = XLImage(self.get_rest_image())  # 使用新的方法获取图片
-                img.width = 15
-                img.height = 15
-                
-                # 使用新的定位方法
-                self.offset_image(img, col-1, row-1)  # 因为Excel的行列索引从0开始
-                ws.add_image(img)
+                # 添加"休"字标记
+                rest_config = self.config.get('layout', {}).get('rest_mark', {})
+                use_shape = rest_config.get('use_shape', True)
+                self.add_rest_mark(ws, col-1, row-1, use_shape)  # 因为Excel的行列索引从0开始
                 
                 # 添加节假日名称（绿色）
                 holiday_text = holiday_name
@@ -405,7 +451,7 @@ class ChineseCalendar:
             lunar_cell.alignment = Alignment(horizontal='center', vertical='top', wrap_text=True)
 
             # 周末设置红色（如果不是节假日）
-            if col in [6, 7] and not is_holiday_day:
+            if col in [7, 8] and not is_holiday_day:  # 修改为7和8列
                 date_cell.font = Font(
                     name=date_style.get('font_name', 'DINPro-Bold'),
                     size=date_style.get('font_size', 16),
@@ -419,8 +465,8 @@ class ChineseCalendar:
 
             # 移动到下一个单元格
             col += 1
-            if col > 7:
-                col = 1
+            if col > 8:  # 修改为8
+                col = 3  # 修改为3
                 row += 2
 
             current_day += timedelta(days=1)
@@ -448,22 +494,30 @@ class ChineseCalendar:
             # 创建工作表
             ws = wb.create_sheet(title=f"{month}月")
             
+            # 隐藏网格线
+            ws.sheet_view.showGridLines = False
+            
+            # 插入一列在日历区域左边
+            ws.insert_cols(1)
+            
             # 从配置文件获取列宽
             column_width = self.config.get('column_width', 10.5)
             # 设置列宽
-            for col in range(1, 8):
+            for col in range(2, 9):  # B到H列
                 ws.column_dimensions[chr(64 + col)].width = column_width
+            # 设置A列宽度（左边空白列）
+            ws.column_dimensions['A'].width = column_width
 
             # 从配置文件获取样式和布局设置
             styles = self.config.get('styles', {})
             layout = self.config.get('layout', {})
 
-            # 设置标题
-            ws.merge_cells('A1:G1')
-            ws['A1'] = f"{year}年{month}月"
-            ws['A1'].alignment = Alignment(horizontal='center', vertical='center')
+            # 设置标题（从第2行开始）
+            ws.merge_cells('B2:H2')
+            ws['B2'] = f"{year}年{month}月"
+            ws['B2'].alignment = Alignment(horizontal='center', vertical='center')
             title_style = styles.get('title', {})
-            ws['A1'].font = Font(
+            ws['B2'].font = Font(
                 name=title_style.get('font_name', '微软雅黑'),
                 size=title_style.get('font_size', 16),
                 bold=title_style.get('bold', True)
@@ -472,10 +526,10 @@ class ChineseCalendar:
             # 设置星期标题
             weekdays = ["周一", "周二", "周三", "周四", "周五", "周六", "周日"]
             weekday_style = styles.get('weekday', {})
-            for col, day in enumerate(weekdays, 1):
-                cell = ws.cell(row=2, column=col)
+            for col, day in enumerate(weekdays, 2):  # 从B列开始
+                cell = ws.cell(row=3, column=col)
                 cell.value = day
-                cell.alignment = Alignment(horizontal='center')
+                cell.alignment = Alignment(horizontal='center', vertical='center')  # 水平垂直居中
                 cell.font = Font(
                     name=weekday_style.get('font_name', '微软雅黑'),
                     size=weekday_style.get('font_size', 10),
@@ -495,22 +549,53 @@ class ChineseCalendar:
             first_weekday = first_day.weekday()
             total_days = calendar.monthrange(year, month)[1]
             total_weeks = (first_weekday + total_days + 6) // 7
-            total_rows = 2 + (total_weeks * 2)  # 标题行 + 星期行 + (每周2行)
+            total_rows = 3 + (total_weeks * 2)  # 标题行 + 星期行 + (每周2行)
             
             # 设置行高
             row_heights = layout.get('row_heights', {})
-            ws.row_dimensions[1].height = row_heights.get('title', 30)
-            ws.row_dimensions[2].height = row_heights.get('weekday', 20)
+            ws.row_dimensions[2].height = row_heights.get('title', 30)  # 标题行
+            ws.row_dimensions[3].height = row_heights.get('weekday', 20)  # 星期行
             
             # 设置日期和农历行高
-            for r in range(3, total_rows + 1, 2):
+            for r in range(4, total_rows + 1, 2):
                 ws.row_dimensions[r].height = row_heights.get('date', 30)
                 ws.row_dimensions[r+1].height = row_heights.get('lunar', 30)
             
+            # 设置日历区域外边框（粗线）
+            border = Border(
+                left=Side(style='thick'),
+                right=Side(style='thick'),
+                top=Side(style='thick'),
+                bottom=Side(style='thick')
+            )
+            
+            # 应用边框到整个日历区域
+            for row in range(2, total_rows + 1):
+                for col in range(2, 9):  # B到H列
+                    cell = ws.cell(row=row, column=col)
+                    if row == 2:  # 顶部边框
+                        cell.border = Border(top=Side(style='thick'))
+                    elif row == total_rows:  # 底部边框
+                        cell.border = Border(bottom=Side(style='thick'))
+                    if col == 2:  # 左侧边框
+                        cell.border = Border(left=Side(style='thick'))
+                    elif col == 8:  # 右侧边框
+                        cell.border = Border(right=Side(style='thick'))
+                        
+                    # 设置角落的边框
+                    if row == 2 and col == 2:  # 左上角
+                        cell.border = Border(left=Side(style='thick'), top=Side(style='thick'))
+                    elif row == 2 and col == 8:  # 右上角
+                        cell.border = Border(right=Side(style='thick'), top=Side(style='thick'))
+                    elif row == total_rows and col == 2:  # 左下角
+                        cell.border = Border(left=Side(style='thick'), bottom=Side(style='thick'))
+                    elif row == total_rows and col == 8:  # 右下角
+                        cell.border = Border(right=Side(style='thick'), bottom=Side(style='thick'))
+            
             # 填充日历数据
             current_day = first_day
-            row = 3  # 从第3行开始（紧接着星期标题）
-            col = week_day + 1
+            row = 4  # 从第4行开始（紧接着星期标题）
+            col = week_day + 2   # 从C列开始，所以要加3而不是2
 
             while current_day.month == month:
                 # 日期单元格
@@ -537,14 +622,10 @@ class ChineseCalendar:
                 lunar_style = styles.get('lunar', {})
 
                 if is_holiday_day:
-                    # 添加"休"字图片
-                    img = XLImage(cal.get_rest_image())  # 使用新的方法获取图片
-                    img.width = 15
-                    img.height = 15
-                    
-                    # 使用新的定位方法
-                    cal.offset_image(img, col-1, row-1)  # 因为Excel的行列索引从0开始
-                    ws.add_image(img)
+                    # 添加"休"字标记
+                    rest_config = self.config.get('layout', {}).get('rest_mark', {})
+                    use_shape = rest_config.get('use_shape', True)
+                    self.add_rest_mark(ws, col-1, row-1, use_shape)  # 因为Excel的行列索引从0开始
                     
                     # 添加节假日名称（绿色）
                     holiday_text = holiday_name
@@ -564,7 +645,7 @@ class ChineseCalendar:
                 lunar_cell.alignment = Alignment(horizontal='center', vertical='top', wrap_text=True)
 
                 # 周末设置红色（如果不是节假日）
-                if col in [6, 7] and not is_holiday_day:
+                if col in [7, 8] and not is_holiday_day:  # 修改为7和8列
                     date_cell.font = Font(
                         name=date_style.get('font_name', 'DINPro-Bold'),
                         size=date_style.get('font_size', 16),
@@ -578,8 +659,8 @@ class ChineseCalendar:
 
                 # 移动到下一个单元格
                 col += 1
-                if col > 7:
-                    col = 1
+                if col > 8:  # 修改为8
+                    col = 2  # 修改为3
                     row += 2
 
                 current_day += timedelta(days=1)
@@ -587,6 +668,74 @@ class ChineseCalendar:
         # 保存文件
         wb.save(filename)
         print(f"全年日历已保存到 {filename}")
+
+    def add_rest_mark_as_shape(self, ws, col, row):
+        """使用文本框添加'休'字标记"""
+        from openpyxl.drawing.shapes import Shape
+        from openpyxl.drawing.spreadsheet_drawing import OneCellAnchor, AnchorMarker
+        from openpyxl.drawing.xdr import XDRPositiveSize2D
+        from openpyxl.drawing.text import Paragraph, ParagraphProperties, CharacterProperties, Font, RegularTextRun
+        from openpyxl.utils.units import pixels_to_EMU
+
+        # 从配置文件获取休字标记的设置
+        rest_config = self.config.get('layout', {}).get('rest_mark', {})
+        
+        # 创建一个文本框
+        shape = Shape()
+        shape.txBody = RegularTextRun("休")  # 设置文本内容
+        
+        # 设置文本框样式
+        color_str = rest_config.get('color', "008000")
+        font = Font(
+            typeface=rest_config.get('font_name', "华文细黑"),
+            sz=rest_config.get('font_size', 8) * 100,  # 字体大小需要乘以100
+            color=color_str
+        )
+        
+        # 设置文本属性
+        rpr = CharacterProperties(latin=font, ea=font, cs=font)
+        ppr = ParagraphProperties(algn='ctr')  # 居中对齐
+        p = Paragraph(pPr=ppr, endParaRPr=rpr)
+        shape.txBody.p_lst = [p]
+        
+        # 设置形状属性（无填充、无边框）
+        shape.noFill = True  # 无填充
+        shape.ln = None  # 无边框
+        
+        # 设置位置和大小
+        width = rest_config.get('width', 15)
+        height = rest_config.get('height', 15)
+        pixels_right = rest_config.get('offset_x', 44)
+        pixels_down = rest_config.get('offset_y', 0)
+        
+        # 转换为EMU单位
+        p2e = pixels_to_EMU
+        marker = AnchorMarker(
+            col=col,
+            colOff=p2e(pixels_right),
+            row=row,
+            rowOff=p2e(pixels_down)
+        )
+        size = XDRPositiveSize2D(p2e(width), p2e(height))
+        
+        # 设置锚点
+        anchor = OneCellAnchor(_from=marker, ext=size)
+        shape.anchor = anchor
+        
+        # 添加到工作表
+        ws.add_shape(shape)
+
+    def add_rest_mark(self, ws, col, row, use_shape=True):
+        """添加'休'字标记，可选择使用文本框或图片"""
+        if use_shape:
+            self.add_rest_mark_as_shape(ws, col, row)
+        else:
+            # 使用图片方式
+            img = XLImage(self.get_rest_image())
+            img.width = 15
+            img.height = 15
+            self.offset_image(img, col, row)
+            ws.add_image(img)
 
 # 使用示例
 if __name__ == "__main__":

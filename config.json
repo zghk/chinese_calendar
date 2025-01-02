@@ -28,25 +28,32 @@
     "layout": {
         "row_heights": {
             "title": 30,
-            "weekday": 20,
+            "weekday": 30,
             "date": 30,
             "lunar": 30
         },
         "rest_mark": {
             "width": 15,
             "height": 15,
-            "offset_x": 40,
+            "offset_x": 44,
             "offset_y": 2,
-            "font_name": "STXIHEI.TTF",
+            "font_name": "华文细黑",
             "font_size": 8,
-            "color": "008000"
+            "color": "008000",
+            "use_shape": false
         }
     },
     "custom_holidays": {
         "solar": {
-            "0416": "州庆",
-            "0417": "州庆",
-            "0418": "州庆"
+            "0414": "州庆",
+            "0415": "州庆",
+            "0716": "火把节",
+            "0717": "火把节",
+            "0718": "火把节",
+            "1220": "彝族年",
+            "1221": "彝族年",
+            "1222": "彝族年",
+            "1223": "彝族年"
         },
         "lunar": {
         }
