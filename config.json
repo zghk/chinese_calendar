@@ -1,0 +1,54 @@
+{
+    "column_width": 8.5,
+    "year": 2025,
+    "styles": {
+        "title": {
+            "font_name": "微软雅黑",
+            "font_size": 16,
+            "bold": true
+        },
+        "weekday": {
+            "font_name": "微软雅黑",
+            "font_size": 10,
+            "bold": true,
+            "fill_color": "CCCCCC"
+        },
+        "date": {
+            "font_name": "DINPro-Bold",
+            "font_size": 16,
+            "weekend_color": "FF0000"
+        },
+        "lunar": {
+            "font_name": "华文细黑",
+            "font_size": 8,
+            "weekend_color": "FF0000",
+            "holiday_color": "008000"
+        }
+    },
+    "layout": {
+        "row_heights": {
+            "title": 30,
+            "weekday": 20,
+            "date": 30,
+            "lunar": 30
+        },
+        "rest_mark": {
+            "width": 15,
+            "height": 15,
+            "offset_x": 40,
+            "offset_y": 2,
+            "font_name": "STXIHEI.TTF",
+            "font_size": 8,
+            "color": "008000"
+        }
+    },
+    "custom_holidays": {
+        "solar": {
+            "0416": "州庆",
+            "0417": "州庆",
+            "0418": "州庆"
+        },
+        "lunar": {
+        }
+    }
+} 
