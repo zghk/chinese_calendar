@@ -19,12 +19,6 @@ git add .
 echo.
 echo 提交更改...
 git commit -m "Initial commit: Chinese Calendar Generator
-
-- Add main calendar generation script
-- Add configuration file
-- Add batch files for easy use
-- Add documentation and license"
-
 echo.
 echo 切换到main分支...
 git branch -M main
