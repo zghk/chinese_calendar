@@ -332,6 +332,22 @@ class ChineseCalendar:
         first_day = datetime(self.year, self.month, 1)
         week_day = first_day.weekday()
         
+        # 计算需要的总行数
+        first_weekday = first_day.weekday()
+        total_days = calendar.monthrange(self.year, self.month)[1]
+        total_weeks = (first_weekday + total_days + 6) // 7
+        total_rows = 2 + (total_weeks * 2)  # 标题行 + 星期行 + (每周2行)
+        
+        # 设置行高
+        row_heights = layout.get('row_heights', {})
+        ws.row_dimensions[1].height = row_heights.get('title', 30)
+        ws.row_dimensions[2].height = row_heights.get('weekday', 20)
+        
+        # 设置日期和农历行高
+        for r in range(3, total_rows + 1, 2):
+            ws.row_dimensions[r].height = row_heights.get('date', 30)
+            ws.row_dimensions[r+1].height = row_heights.get('lunar', 30)
+        
         # 填充日历数据
         current_day = first_day
         row = 3  # 从第3行开始（紧接着星期标题）
@@ -350,23 +366,22 @@ class ChineseCalendar:
             
             # 设置日期
             date_cell.value = current_day.day
-            date_cell.font = Font(name='DINPro-Bold', size=16)
+            date_style = styles.get('date', {})
+            date_cell.font = Font(
+                name=date_style.get('font_name', 'DINPro-Bold'),
+                size=date_style.get('font_size', 16)
+            )
             date_cell.alignment = Alignment(horizontal='center', vertical='bottom')
 
-            # 设置农历和节日
+            # 获取农历文本
             lunar_text = self.get_lunar_date_str(lunar_date)
-            holiday_text = ""
-            
+            lunar_style = styles.get('lunar', {})
+
             if is_holiday_day:
-                # 设置日期
-                date_cell.value = current_day.day
-                date_cell.font = Font(name='DINPro-Bold', size=16)
-                date_cell.alignment = Alignment(horizontal='center', vertical='bottom')
-                
-                # 添加"休"字图片到单元格右上角
+                # 添加"休"字图片
                 img = XLImage(self.get_rest_image())  # 使用新的方法获取图片
-                img.width = 15  # 设置图片宽度
-                img.height = 15  # 设置图片高度
+                img.width = 15
+                img.height = 15
                 
                 # 使用新的定位方法
                 self.offset_image(img, col-1, row-1)  # 因为Excel的行列索引从0开始
@@ -375,20 +390,32 @@ class ChineseCalendar:
                 # 添加节假日名称（绿色）
                 holiday_text = holiday_name
                 lunar_cell.value = f"{lunar_text}\n{holiday_text}"
-                lunar_cell.font = Font(name='华文细黑', size=8, color="008000")
+                lunar_cell.font = Font(
+                    name=lunar_style.get('font_name', '华文细黑'),
+                    size=lunar_style.get('font_size', 8),
+                    color=lunar_style.get('holiday_color', "008000")
+                )
             else:
-                date_cell.value = current_day.day
-                date_cell.font = Font(name='DINPro-Bold', size=16)
-                date_cell.alignment = Alignment(horizontal='center', vertical='bottom')
                 lunar_cell.value = lunar_text
-                lunar_cell.font = Font(name='华文细黑', size=8)
+                lunar_cell.font = Font(
+                    name=lunar_style.get('font_name', '华文细黑'),
+                    size=lunar_style.get('font_size', 8)
+                )
             
             lunar_cell.alignment = Alignment(horizontal='center', vertical='top', wrap_text=True)
 
             # 周末设置红色（如果不是节假日）
             if col in [6, 7] and not is_holiday_day:
-                date_cell.font = Font(name='DINPro-Bold', size=16, color="FF0000")
-                lunar_cell.font = Font(name='华文细黑', size=8, color="FF0000")
+                date_cell.font = Font(
+                    name=date_style.get('font_name', 'DINPro-Bold'),
+                    size=date_style.get('font_size', 16),
+                    color=date_style.get('weekend_color', "FF0000")
+                )
+                lunar_cell.font = Font(
+                    name=lunar_style.get('font_name', '华文细黑'),
+                    size=lunar_style.get('font_size', 8),
+                    color=lunar_style.get('weekend_color', "FF0000")
+                )
 
             # 移动到下一个单元格
             col += 1
@@ -397,16 +424,6 @@ class ChineseCalendar:
                 row += 2
 
             current_day += timedelta(days=1)
-
-        # 设置行高
-        row_heights = layout.get('row_heights', {})
-        ws.row_dimensions[1].height = row_heights.get('title', 30)
-        ws.row_dimensions[2].height = row_heights.get('weekday', 20)
-        
-        # 设置日期和农历行高
-        for r in range(3, row, 2):
-            ws.row_dimensions[r].height = row_heights.get('date', 30)
-            ws.row_dimensions[r+1].height = row_heights.get('lunar', 30)
 
         # 保存文件
         wb.save(filename)
@@ -437,24 +454,58 @@ class ChineseCalendar:
             for col in range(1, 8):
                 ws.column_dimensions[chr(64 + col)].width = column_width
 
+            # 从配置文件获取样式和布局设置
+            styles = self.config.get('styles', {})
+            layout = self.config.get('layout', {})
+
             # 设置标题
             ws.merge_cells('A1:G1')
             ws['A1'] = f"{year}年{month}月"
             ws['A1'].alignment = Alignment(horizontal='center', vertical='center')
-            ws['A1'].font = Font(size=16, bold=True)
+            title_style = styles.get('title', {})
+            ws['A1'].font = Font(
+                name=title_style.get('font_name', '微软雅黑'),
+                size=title_style.get('font_size', 16),
+                bold=title_style.get('bold', True)
+            )
 
             # 设置星期标题
             weekdays = ["周一", "周二", "周三", "周四", "周五", "周六", "周日"]
+            weekday_style = styles.get('weekday', {})
             for col, day in enumerate(weekdays, 1):
                 cell = ws.cell(row=2, column=col)
                 cell.value = day
                 cell.alignment = Alignment(horizontal='center')
-                cell.font = Font(bold=True)
-                cell.fill = PatternFill(start_color="CCCCCC", end_color="CCCCCC", fill_type="solid")
+                cell.font = Font(
+                    name=weekday_style.get('font_name', '微软雅黑'),
+                    size=weekday_style.get('font_size', 10),
+                    bold=weekday_style.get('bold', True)
+                )
+                cell.fill = PatternFill(
+                    start_color=weekday_style.get('fill_color', "CCCCCC"),
+                    end_color=weekday_style.get('fill_color', "CCCCCC"),
+                    fill_type="solid"
+                )
 
             # 获取当月第一天
             first_day = datetime(year, month, 1)
             week_day = first_day.weekday()
+            
+            # 计算需要的总行数
+            first_weekday = first_day.weekday()
+            total_days = calendar.monthrange(year, month)[1]
+            total_weeks = (first_weekday + total_days + 6) // 7
+            total_rows = 2 + (total_weeks * 2)  # 标题行 + 星期行 + (每周2行)
+            
+            # 设置行高
+            row_heights = layout.get('row_heights', {})
+            ws.row_dimensions[1].height = row_heights.get('title', 30)
+            ws.row_dimensions[2].height = row_heights.get('weekday', 20)
+            
+            # 设置日期和农历行高
+            for r in range(3, total_rows + 1, 2):
+                ws.row_dimensions[r].height = row_heights.get('date', 30)
+                ws.row_dimensions[r+1].height = row_heights.get('lunar', 30)
             
             # 填充日历数据
             current_day = first_day
@@ -474,11 +525,16 @@ class ChineseCalendar:
                 
                 # 设置日期
                 date_cell.value = current_day.day
-                date_cell.font = Font(name='DINPro-Bold', size=16)
+                date_style = styles.get('date', {})
+                date_cell.font = Font(
+                    name=date_style.get('font_name', 'DINPro-Bold'),
+                    size=date_style.get('font_size', 16)
+                )
                 date_cell.alignment = Alignment(horizontal='center', vertical='bottom')
 
                 # 获取农历文本
                 lunar_text = cal.get_lunar_date_str(lunar_date)
+                lunar_style = styles.get('lunar', {})
 
                 if is_holiday_day:
                     # 添加"休"字图片
@@ -493,17 +549,32 @@ class ChineseCalendar:
                     # 添加节假日名称（绿色）
                     holiday_text = holiday_name
                     lunar_cell.value = f"{lunar_text}\n{holiday_text}"
-                    lunar_cell.font = Font(name='华文细黑', size=8, color="008000")
+                    lunar_cell.font = Font(
+                        name=lunar_style.get('font_name', '华文细黑'),
+                        size=lunar_style.get('font_size', 8),
+                        color=lunar_style.get('holiday_color', "008000")
+                    )
                 else:
                     lunar_cell.value = lunar_text
-                    lunar_cell.font = Font(name='华文细黑', size=8)
+                    lunar_cell.font = Font(
+                        name=lunar_style.get('font_name', '华文细黑'),
+                        size=lunar_style.get('font_size', 8)
+                    )
                 
                 lunar_cell.alignment = Alignment(horizontal='center', vertical='top', wrap_text=True)
 
                 # 周末设置红色（如果不是节假日）
                 if col in [6, 7] and not is_holiday_day:
-                    date_cell.font = Font(name='DINPro-Bold', size=16, color="FF0000")
-                    lunar_cell.font = Font(name='华文细黑', size=8, color="FF0000")
+                    date_cell.font = Font(
+                        name=date_style.get('font_name', 'DINPro-Bold'),
+                        size=date_style.get('font_size', 16),
+                        color=date_style.get('weekend_color', "FF0000")
+                    )
+                    lunar_cell.font = Font(
+                        name=lunar_style.get('font_name', '华文细黑'),
+                        size=lunar_style.get('font_size', 8),
+                        color=lunar_style.get('weekend_color', "FF0000")
+                    )
 
                 # 移动到下一个单元格
                 col += 1
@@ -512,14 +583,6 @@ class ChineseCalendar:
                     row += 2
 
                 current_day += timedelta(days=1)
-
-            # 设置行高
-            ws.row_dimensions[1].height = 30  # 标题行高
-            ws.row_dimensions[2].height = 20  # 星期行高
-            # 设置日期和农历行高
-            for r in range(3, row, 2):
-                ws.row_dimensions[r].height = 30     # 日期行
-                ws.row_dimensions[r+1].height = 30   # 农历行
 
         # 保存文件
         wb.save(filename)
