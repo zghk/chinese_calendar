@@ -1,5 +1,4 @@
 @echo off
-chcp 65001 >nul
 
 echo ≥ı ºªØGit≤÷ø‚...
 git init
