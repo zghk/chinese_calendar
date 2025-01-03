@@ -2,11 +2,11 @@
 chcp 65001 >nul
 
 echo 正在安装依赖库...
-pip3 install openpyxl==3.0.10 Pillow==9.5.0 lunar-python==1.3.12 requests==2.28.2
+pip3 install openpyxl==3.0.10 Pillow==9.5.0 lunar-python==1.3.12 requests==2.28.2 pywin32==306
 
 echo.
 echo 验证安装...
-python -c "import openpyxl; import PIL; import lunar_python; import requests; print('所有依赖库安装成功！')"
+python -c "import openpyxl; import PIL; import lunar_python; import requests; import win32com.client; print('所有依赖库安装成功！')"
 
 if %errorlevel% equ 0 (
     echo.

@@ -10,6 +10,8 @@ from openpyxl.drawing.image import Image as XLImage
 import io
 import json
 import os
+import win32com.client
+import time
 
 class ChineseCalendar:
     def __init__(self, year, month, config_file='config.json'):
@@ -139,6 +141,9 @@ class ChineseCalendar:
             def __init__(self, lunar):
                 self.lunar_month = lunar.getMonth()
                 self.lunar_day = lunar.getDay()
+                # 获取节气（如果当天是节气的话）
+                jieqi = lunar.getJieQi()
+                self.solar_term = jieqi if jieqi else None
         return LunarDate(lunar)
 
     def get_holiday(self, date):
@@ -152,6 +157,10 @@ class ChineseCalendar:
 
     def get_lunar_date_str(self, lunar_date):
         """将农历日期转换为中文格式"""
+        # 如果是节气，返回节气名称
+        if lunar_date.solar_term:
+            return lunar_date.solar_term
+            
         # 确保月份为正数
         month = abs(lunar_date.lunar_month)
         if month == 0:  # 处理月份为0的特殊情况
@@ -294,8 +303,154 @@ class ChineseCalendar:
         )
         img.anchor = OneCellAnchor(_from=marker, ext=size)
 
+    def add_vba_macro(self, filename):
+        """使用win32com添加VBA宏代码"""
+        try:
+            # 确保文件是.xlsx格式
+            if filename.endswith('.xlsm'):
+                temp_filename = filename[:-5] + '.xlsx'
+            else:
+                temp_filename = filename
+                filename = filename[:-5] + '.xlsm'
+            
+            # 创建Excel应用程序实例
+            excel = win32com.client.Dispatch("Excel.Application")
+            excel.Visible = False
+            excel.DisplayAlerts = False
+            
+            try:
+                # 打开工作簿
+                wb = excel.Workbooks.Open(os.path.abspath(temp_filename))
+                
+                try:
+                    # 尝试访问VBA项目
+                    vba_module = wb.VBProject.VBComponents.Add(1)  # 1 = vbext_ct_StdModule
+                except Exception as e:
+                    if "不信任到 Visual Basic Project 的程序连接" in str(e):
+                        print("\n需要修改Excel安全设置才能添加宏代码：")
+                        print("1. 打开Excel")
+                        print("2. 点击'文件' -> '选项' -> '信任中心'")
+                        print("3. 点击'信任中心设置' -> 'VBA工程对象模型访问'")
+                        print("4. 选中'信任对VBA工程对象模型的访问'")
+                        print("5. 点击'确定'保存设置")
+                        print("\n修改设置后，请重新运行程序。")
+                        return False
+                    else:
+                        raise
+                
+                # 获取Excel文件所在的目录的绝对路径
+                excel_dir = os.path.abspath(os.path.dirname(filename))
+                svg_path = os.path.join(excel_dir, "休.svg")
+                # 确保路径使用正斜杠
+                svg_path = svg_path.replace('\\', '\\\\')
+                
+                vba_code = '''Sub 替换所有对象为图片()
+    Dim ws As Worksheet
+    Dim shp As Shape
+    Dim picturePath As String
+    
+    ' 设置图片路径为绝对路径
+    picturePath = "''' + svg_path + '''"
+    
+    ' 确认图片文件存在
+    If Dir(picturePath) = "" Then
+        MsgBox "找不到指定的图片文件！" & vbCrLf & picturePath, vbExclamation
+        Exit Sub
+    End If
+    
+    ' 遍历当前工作簿的所有工作表
+    For Each ws In ThisWorkbook.Worksheets
+        ' 如果工作表中有形状对象
+        If ws.Shapes.Count > 0 Then
+            ' 从后向前遍历所有形状（这样删除对象时不会影响索引）
+            For i = ws.Shapes.Count To 1 Step -1
+                ' 获取当前形状对象
+                Set shp = ws.Shapes(i)
+                
+                ' 记录原始位置和大小
+                Dim Left As Double: Left = shp.Left
+                Dim Top As Double: Top = shp.Top
+                Dim Width As Double: Width = shp.Width
+                Dim Height As Double: Height = shp.Height
+                
+                ' 删除原始对象
+                shp.Delete
+                
+                ' 插入新图片并设置位置和大小
+                ws.Shapes.AddPicture _
+                    Filename:=picturePath, _
+                    LinkToFile:=False, _
+                    SaveWithDocument:=True, _
+                    Left:=Left, _
+                    Top:=Top, _
+                    Width:=Width, _
+                    Height:=Height
+            Next i
+        End If
+    Next ws
+    
+    MsgBox "所有对象已替换完成！", vbInformation
+End Sub'''
+                
+                # 将代码写入模块
+                vba_module.CodeModule.AddFromString(vba_code)
+                
+                # 另存为.xlsm文件
+                wb.SaveAs(os.path.abspath(filename), FileFormat=52)  # 52 = xlOpenXMLWorkbookMacroEnabled
+                wb.Close()
+                
+                print("已添加VBA宏代码")
+                return True
+            finally:
+                # 确保Excel实例被关闭
+                excel.Quit()
+        except Exception as e:
+            print(f"添加VBA宏代码失败: {e}")
+            return False
+
+    def close_excel_instances(self):
+        """关闭所有Excel实例"""
+        try:
+            import win32com.client
+            excel = win32com.client.GetObject(Class="Excel.Application")
+            excel.Quit()
+        except:
+            pass  # 如果没有打开的Excel实例，会抛出异常，我们可以忽略
+
+    def save_with_retry(self, wb, filename, max_retries=3, delay=1):
+        """尝试保存文件，如果失败则重试"""
+        import time
+        
+        for i in range(max_retries):
+            try:
+                # 尝试关闭Excel实例
+                self.close_excel_instances()
+                
+                # 如果文件存在，先尝试删除
+                if os.path.exists(filename):
+                    try:
+                        os.remove(filename)
+                    except:
+                        pass
+                
+                # 保存文件
+                wb.save(filename)
+                return True
+            except PermissionError:
+                if i < max_retries - 1:  # 如果不是最后一次尝试
+                    print(f"保存失败，{delay}秒后重试...")
+                    time.sleep(delay)
+                else:
+                    print(f"无法保存文件 {filename}，请确保文件未被其他程序打开")
+                    return False
+            except Exception as e:
+                print(f"保存文件时出错: {e}")
+                return False
+        return False
+
     def generate_excel_calendar(self, filename="calendar.xlsx"):
         """生成Excel格式的日历"""
+        # 先生成.xlsx文件
         wb = Workbook()
         ws = wb.active
         ws.title = f"{self.year}年{self.month}月"
@@ -443,15 +598,23 @@ class ChineseCalendar:
                 )
             else:
                 lunar_cell.value = lunar_text
-                lunar_cell.font = Font(
-                    name=lunar_style.get('font_name', '华文细黑'),
-                    size=lunar_style.get('font_size', 8)
-                )
+                # 如果是节气，使用橙色字体
+                if lunar_date.solar_term:
+                    lunar_cell.font = Font(
+                        name=lunar_style.get('font_name', '华文细黑'),
+                        size=lunar_style.get('font_size', 8),
+                        color="FFA500"  # 橙色
+                    )
+                else:
+                    lunar_cell.font = Font(
+                        name=lunar_style.get('font_name', '华文细黑'),
+                        size=lunar_style.get('font_size', 8)
+                    )
             
             lunar_cell.alignment = Alignment(horizontal='center', vertical='top', wrap_text=True)
 
-            # 周末设置红色（如果不是节假日）
-            if col in [7, 8] and not is_holiday_day:  # 修改为7和8列
+            # 周末设置红色（如果不是节假日和节气）
+            if col in [7, 8] and not is_holiday_day and not lunar_date.solar_term:  # 修改为7和8列
                 date_cell.font = Font(
                     name=date_style.get('font_name', 'DINPro-Bold'),
                     size=date_style.get('font_size', 16),
@@ -471,13 +634,23 @@ class ChineseCalendar:
 
             current_day += timedelta(days=1)
 
-        # 保存文件
-        wb.save(filename)
+        # 保存为.xlsx文件
+        if not self.save_with_retry(wb, filename):
+            return False
+        
         print(f"日历已保存到 {filename}")
+        
+        # 添加VBA宏代码并转换为.xlsm
+        if filename.endswith('.xlsx'):
+            xlsm_filename = filename[:-5] + '.xlsm'
+            if self.add_vba_macro(filename):
+                print(f"已生成启用宏的Excel文件: {xlsm_filename}")
+        
+        return True
 
     def generate_year_calendar(self, year=None, filename="calendar.xlsx"):
         """生成整年的日历，每个月一个工作表"""
-        # 如果没有指定年份，使用配置文件中的年份
+        # 先生成.xlsx文件
         if year is None:
             year = self.config.get('year', 2025)
             
@@ -637,15 +810,23 @@ class ChineseCalendar:
                     )
                 else:
                     lunar_cell.value = lunar_text
-                    lunar_cell.font = Font(
-                        name=lunar_style.get('font_name', '华文细黑'),
-                        size=lunar_style.get('font_size', 8)
-                    )
+                    # 如果是节气，使用橙色字体
+                    if lunar_date.solar_term:
+                        lunar_cell.font = Font(
+                            name=lunar_style.get('font_name', '华文细黑'),
+                            size=lunar_style.get('font_size', 8),
+                            color="FFA500"  # 橙色
+                        )
+                    else:
+                        lunar_cell.font = Font(
+                            name=lunar_style.get('font_name', '华文细黑'),
+                            size=lunar_style.get('font_size', 8)
+                        )
                 
                 lunar_cell.alignment = Alignment(horizontal='center', vertical='top', wrap_text=True)
 
-                # 周末设置红色（如果不是节假日）
-                if col in [7, 8] and not is_holiday_day:  # 修改为7和8列
+                # 周末设置红色（如果不是节假日和节气）
+                if col in [7, 8] and not is_holiday_day and not lunar_date.solar_term:  # 修改为7和8列
                     date_cell.font = Font(
                         name=date_style.get('font_name', 'DINPro-Bold'),
                         size=date_style.get('font_size', 16),
@@ -660,14 +841,24 @@ class ChineseCalendar:
                 # 移动到下一个单元格
                 col += 1
                 if col > 8:  # 修改为8
-                    col = 2  # 修改为3
+                    col = 2  # 修改为2
                     row += 2
 
                 current_day += timedelta(days=1)
 
-        # 保存文件
-        wb.save(filename)
+        # 保存为.xlsx文件
+        if not self.save_with_retry(wb, filename):
+            return False
+            
         print(f"全年日历已保存到 {filename}")
+        
+        # 添加VBA宏代码并转换为.xlsm
+        if filename.endswith('.xlsx'):
+            xlsm_filename = filename[:-5] + '.xlsm'
+            if self.add_vba_macro(filename):
+                print(f"已生成启用宏的Excel文件: {xlsm_filename}")
+        
+        return True
 
     def add_rest_mark_as_shape(self, ws, col, row):
         """使用文本框添加'休'字标记"""
@@ -747,9 +938,30 @@ if __name__ == "__main__":
     parser.add_argument('--config', type=str, default='config.json', help='配置文件路径')
     args = parser.parse_args()
     
-    # 创建日历实例
-    cal = ChineseCalendar(args.year if args.year else 2025, 1, config_file=args.config)
-    
-    # 生成日历
-    output_filename = f"calendar_{args.year if args.year else cal.config['year']}.xlsx"
-    cal.generate_year_calendar(args.year, output_filename) 
+    try:
+        # 创建日历实例
+        cal = ChineseCalendar(args.year if args.year else 2025, 1, config_file=args.config)
+        
+        # 生成日历
+        output_filename = f"calendar_{args.year if args.year else cal.config['year']}.xlsx"
+        
+        # 尝试生成日历
+        if not cal.generate_year_calendar(args.year, output_filename):
+            print("\n生成日历失败。")
+            print("如果是因为Excel安全设置问题，请按照上述说明修改设置后重试。")
+            print("如果问题仍然存在，请检查是否有其他Excel文件正在使用。")
+            exit(1)
+        else:
+            print("\n日历生成成功！")
+            print(f"1. Excel文件：{output_filename}")
+            xlsm_filename = output_filename[:-5] + '.xlsm'
+            if os.path.exists(xlsm_filename):
+                print(f"2. 启用宏的Excel文件：{xlsm_filename}")
+                print("\n要使用SVG图片替换功能：")
+                print("1. 将'休.svg'文件放在Excel文件同目录下")
+                print("2. 打开启用宏的Excel文件（.xlsm）")
+                print("3. 点击'启用宏'")
+                print("4. 运行'替换图片'宏")
+    except Exception as e:
+        print(f"\n发生错误: {e}")
+        exit(1) 

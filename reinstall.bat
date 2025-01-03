@@ -2,7 +2,7 @@
 chcp 65001 >nul
 
 echo 正在卸载现有的依赖库...
-pip3 uninstall -y openpyxl Pillow lunar-python requests
+pip3 uninstall -y openpyxl Pillow lunar-python requests pywin32
 
 echo.
 echo 正在安装指定版本的依赖库...
@@ -23,9 +23,13 @@ echo 安装 requests...
 pip3 install requests==2.28.2
 if %errorlevel% neq 0 goto :error
 
+echo 安装 pywin32...
+pip3 install pywin32==306
+if %errorlevel% neq 0 goto :error
+
 echo.
 echo 验证安装...
-python -c "import openpyxl; import PIL; import lunar_python; import requests; print('所有库安装成功！')"
+python -c "import openpyxl; import PIL; import lunar_python; import requests; import win32com.client; print('所有库安装成功！')"
 if %errorlevel% neq 0 goto :verify_error
 
 goto :success
