@@ -487,6 +487,24 @@ End Sub'''
         # 设置星期标题
         weekdays = ["周一", "周二", "周三", "周四", "周五", "周六", "周日"]
         weekday_style = styles.get('weekday', {})
+        
+        # 获取背景色和字体颜色
+        fill_color = weekday_style.get('fill_color', "CCCCCC")
+        # 如果没有设置字体颜色，则使用与背景色相反的颜色
+        if 'font_color' not in weekday_style:
+            # 将背景色转换为RGB值
+            r = int(fill_color[0:2], 16)
+            g = int(fill_color[2:4], 16)
+            b = int(fill_color[4:6], 16)
+            # 计算反色
+            r = 255 - r
+            g = 255 - g
+            b = 255 - b
+            # 转换回十六进制
+            font_color = f"{r:02X}{g:02X}{b:02X}"
+        else:
+            font_color = weekday_style.get('font_color')
+        
         for col, day in enumerate(weekdays, 2):  # 从B列开始
             cell = ws.cell(row=3, column=col)
             cell.value = day
@@ -494,11 +512,12 @@ End Sub'''
             cell.font = Font(
                 name=weekday_style.get('font_name', '微软雅黑'),
                 size=weekday_style.get('font_size', 10),
-                bold=weekday_style.get('bold', True)
+                bold=weekday_style.get('bold', True),
+                color=font_color
             )
             cell.fill = PatternFill(
-                start_color=weekday_style.get('fill_color', "CCCCCC"),
-                end_color=weekday_style.get('fill_color', "CCCCCC"),
+                start_color=fill_color,
+                end_color=fill_color,
                 fill_type="solid"
             )
 
@@ -699,6 +718,24 @@ End Sub'''
             # 设置星期标题
             weekdays = ["周一", "周二", "周三", "周四", "周五", "周六", "周日"]
             weekday_style = styles.get('weekday', {})
+            
+            # 获取背景色和字体颜色
+            fill_color = weekday_style.get('fill_color', "CCCCCC")
+            # 如果没有设置字体颜色，则使用与背景色相反的颜色
+            if 'font_color' not in weekday_style:
+                # 将背景色转换为RGB值
+                r = int(fill_color[0:2], 16)
+                g = int(fill_color[2:4], 16)
+                b = int(fill_color[4:6], 16)
+                # 计算反色
+                r = 255 - r
+                g = 255 - g
+                b = 255 - b
+                # 转换回十六进制
+                font_color = f"{r:02X}{g:02X}{b:02X}"
+            else:
+                font_color = weekday_style.get('font_color')
+            
             for col, day in enumerate(weekdays, 2):  # 从B列开始
                 cell = ws.cell(row=3, column=col)
                 cell.value = day
@@ -706,11 +743,12 @@ End Sub'''
                 cell.font = Font(
                     name=weekday_style.get('font_name', '微软雅黑'),
                     size=weekday_style.get('font_size', 10),
-                    bold=weekday_style.get('bold', True)
+                    bold=weekday_style.get('bold', True),
+                    color=font_color
                 )
                 cell.fill = PatternFill(
-                    start_color=weekday_style.get('fill_color', "CCCCCC"),
-                    end_color=weekday_style.get('fill_color', "CCCCCC"),
+                    start_color=fill_color,
+                    end_color=fill_color,
                     fill_type="solid"
                 )
 

@@ -11,7 +11,8 @@
             "font_name": "微软雅黑",
             "font_size": 10,
             "bold": true,
-            "fill_color": "CCCCCC"
+            "fill_color": "333333",
+            "font_color": "E6E6E6"
         },
         "date": {
             "font_name": "DINPro-Bold",
